@@ -1,0 +1,3 @@
+使用 Burp 的 Discover Content 功能爬取任意站点的目录，给出爬取过程的说明文档、站点树截图；
+主要是用engagement tools的 Discover Content功能，这个有三部分组成control config  sitemap，control主要是产生一些概览信息，比如请求模块，传输的字节数 错误数字 任务队列
+config 主要是是配置目标的文件或者目录  文件名  文件扩展名 等， sitemap则是返回站点的树形结构，但是没有漏洞模块（只做爬虫不做扫描）
